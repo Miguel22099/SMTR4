@@ -1,7 +1,7 @@
 import json
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..classes import Counter
 from ..events import MutableList
@@ -154,3 +154,43 @@ class Json_list[T: SupportsJsonTransform]:
         self.clear()
         self.extend(data)
         return item
+
+
+class Single_Json_Saver[T]:
+    """Persists a single value as one JSON document.
+
+    Objects exposing `to_json()` are frozen recursively into plain data;
+    `revive` rebuilds them on load.
+    """
+
+    def __init__(self, file_path: str, revive: Callable[[Any], T] | None = None) -> None:
+        self._path = file_path
+        self._revive = revive
+
+    @staticmethod
+    def _freeze(value: Any) -> Any:
+        if hasattr(value, "to_json"):
+            return value.to_json()
+        if isinstance(value, (tuple, list)):
+            return [Single_Json_Saver._freeze(item) for item in value]
+        return value
+
+    def save(self, data: T) -> None:
+        with open(self._path, "w", encoding="utf-8") as f:
+            json.dump(self._freeze(data), f, indent=2)
+
+    def save_tuple(self, *data: Any) -> None:
+        self.save(data)
+
+    def _load_json(self) -> Any | None:
+        try:
+            with open(self._path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError, json.JSONDecodeError:
+            return None
+
+    def load(self) -> T | None:
+        data = self._load_json()
+        if data is None:
+            return None
+        return self._revive(data) if self._revive else data
