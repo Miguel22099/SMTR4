@@ -1,10 +1,12 @@
 from collections.abc import Callable, Sequence
 from typing import Any, Literal, Self, cast
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
+    QBoxLayout,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -247,6 +249,28 @@ class ScreenManager(MWidget):
     def goToStart(self) -> None:
         self.setIndex(0)
 
+    def insertScreen(self, index: int, screen: ScreenEntry) -> Self:
+        target = max(0, min(index, len(self._screens)))
+        prev_index = self._stack.currentIndex()
+        materialized_count = self._stack.count()
+
+        self._screens.insert(target, screen)
+
+        if target < materialized_count:
+            widget = screen if isinstance(screen, QWidget) else screen()
+            self._stack.insertWidget(target, widget)
+
+            if prev_index >= target:
+                self.indexChanged.emit(self.index)
+
+        elif target == materialized_count:
+            if isinstance(screen, QWidget) or materialized_count == 0:
+                widget = screen if isinstance(screen, QWidget) else screen()
+                self._stack.addWidget(widget)
+                self._materialize_leading_eager()
+
+        return self
+
 
 class Survey(MWidget):
     def __init__(
@@ -478,3 +502,19 @@ class Dropdown[T = None](QComboBox, WidgetPropsMixin):
 
     def clear(self) -> None:
         self.setCurrentIndex(-1)
+
+
+class TemporalScreen(MWidget):
+    def __init__(
+        self, layout: QBoxLayout, owner: QStackedLayout, life_time: int
+    ) -> None:
+        super().__init__()
+        self.setLayout(layout)
+        self.timer = QTimer(self)
+
+        self.timer.timeout.connect(self.finish_existence)
+        self.timer.start(life_time)
+
+    def finish_existence(self) -> None:
+        self.setParent(None)
+        self.deleteLater()
