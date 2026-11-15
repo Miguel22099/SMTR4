@@ -17,10 +17,10 @@ from ..events import Event, StateVar
 from .protocols import (
     EventEmiter,
     Subscribable,
-    _SupportsRichTextChanged,
-    _SupportsSetChecked,
-    _SupportsSetText,
-    _SupportsStrTextChanged,
+    SupportsRichTextChanged,
+    SupportsSetChecked,
+    SupportsSetText,
+    SupportsStrTextChanged,
 )
 
 type LayoutItem = "QWidget | QLayout | QSpacerItem | Stretch"
@@ -31,7 +31,7 @@ class Stretch:
     val: int = 1
 
 
-class _BoxLayoutMixin:
+class BoxLayoutMixin:
     def __init__(self, *items: LayoutItem, spacing: int = 10, stretch: int = 0) -> None:
         super().__init__()
         assert isinstance(self, QBoxLayout)
@@ -60,7 +60,7 @@ class _BoxLayoutMixin:
                     )
 
 
-class _WidgetPropsMixin:
+class WidgetPropsMixin:
     @property
     def _widget(self) -> QWidget:
         assert isinstance(self, QWidget)
@@ -201,42 +201,42 @@ class _WidgetPropsMixin:
         return cast(type[T], Wrapped)
 
 
-class _SetTextMixin(_WidgetPropsMixin):
+class SetTextMixin(WidgetPropsMixin):
     def textBy(self, event: Subscribable[str]) -> Self:
-        target = cast(_SupportsSetText, self)
+        target = cast(SupportsSetText, self)
         event.connect(target.setText)
         return self
 
     def clean(self) -> None:
-        target = cast(_SupportsSetText, self)
+        target = cast(SupportsSetText, self)
         target.setText("")
 
 
-class _LineTextMixin(_SetTextMixin):
+class LineTextMixin(SetTextMixin):
     def writeOn(self, state: StateVar[str]) -> Self:
-        target = cast(_SupportsStrTextChanged, self)
+        target = cast(SupportsStrTextChanged, self)
         target.textChanged.connect(state.set_value)
         return self
 
 
-class _RichTextMixin(_SetTextMixin):
+class RichTextMixin(SetTextMixin):
     def writeOn(self, state: StateVar[str]) -> Self:
-        target = cast(_SupportsRichTextChanged, self)
+        target = cast(SupportsRichTextChanged, self)
         target.textChanged.connect(lambda: state.set_value(target.toPlainText()))
         return self
 
 
-class _CheckableMixin(_WidgetPropsMixin):
+class CheckableMixin(WidgetPropsMixin):
     def checkBy(self, event: Subscribable[bool]) -> Self:
-        target = cast(_SupportsSetChecked, self)
+        target = cast(SupportsSetChecked, self)
         event.connect(target.setChecked)
         return self
 
     def checkOn(self, event: EventEmiter[bool]) -> Self:
-        target = cast(_SupportsSetChecked, self)
+        target = cast(SupportsSetChecked, self)
         target.toggled.connect(event.emit)
         return self
 
     def clean(self) -> None:
-        target = cast(_SupportsSetChecked, self)
+        target = cast(SupportsSetChecked, self)
         target.setChecked(False)

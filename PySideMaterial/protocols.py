@@ -19,21 +19,21 @@ class SupportsIndex(Protocol):
     def setIndex(self, index: int, /) -> None: ...
 
 
-class _SupportsSetText(Protocol):
+class SupportsSetText(Protocol):
     def setText(self, text: str, /) -> None: ...
 
 
-class _SupportsSetChecked(Protocol):
+class SupportsSetChecked(Protocol):
     toggled: Subscribable[bool]
 
     def setChecked(self, value: bool) -> None: ...
 
 
-class _SupportsStrTextChanged(Protocol):
+class SupportsStrTextChanged(Protocol):
     textChanged: Subscribable[str]
 
 
-class _SupportsRichTextChanged(Protocol):
+class SupportsRichTextChanged(Protocol):
     textChanged: Subscribable[[]]
 
     def toPlainText(self) -> str: ...

@@ -12,9 +12,9 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
-    QLayout,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
@@ -28,12 +28,12 @@ from ..converters import coerce_in
 from ..events import Event, StateVar, StatusHolder
 from .filters import Filter, TextFilter
 from .mixins import (
-    _BoxLayoutMixin,
-    _CheckableMixin,
-    _LineTextMixin,
-    _RichTextMixin,
-    _SetTextMixin,
-    _WidgetPropsMixin,
+    BoxLayoutMixin,
+    CheckableMixin,
+    LineTextMixin,
+    RichTextMixin,
+    SetTextMixin,
+    WidgetPropsMixin,
 )
 
 type ScreenEntry = QWidget | Callable[[], QWidget]
@@ -42,10 +42,10 @@ type GroupLayout = QVBoxLayout | QHBoxLayout | QGridLayout
 type DropdownItem[T] = str | tuple[str, T]
 
 
-class MWidget(QWidget, _WidgetPropsMixin): ...
+class MWidget(QWidget, WidgetPropsMixin): ...
 
 
-class Container(QWidget, _WidgetPropsMixin):
+class Container(QWidget, WidgetPropsMixin):
     """Frame widget that hosts a single layout."""
 
     def __init__(self, layout: QLayout, parent: QWidget | None = None) -> None:
@@ -53,7 +53,7 @@ class Container(QWidget, _WidgetPropsMixin):
         self.setLayout(layout)
 
 
-class ListWidget(QListWidget, _WidgetPropsMixin):
+class ListWidget(QListWidget, WidgetPropsMixin):
     """QListWidget preloaded with items, with selection mode and sorting already configured."""
 
     def __init__(
@@ -77,25 +77,25 @@ class ListWidget(QListWidget, _WidgetPropsMixin):
         return self
 
 
-class Row(_BoxLayoutMixin, QHBoxLayout):
+class Row(BoxLayoutMixin, QHBoxLayout):
     pass
 
 
-class Column(_BoxLayoutMixin, QVBoxLayout):
+class Column(BoxLayoutMixin, QVBoxLayout):
     pass
 
 
-class Label(QLabel, _SetTextMixin):
+class Label(QLabel, SetTextMixin):
     pass
 
 
-class Button(QPushButton, _SetTextMixin):
+class Button(QPushButton, SetTextMixin):
     def onClick(self, action: Callable[[], object]) -> Self:
         self.clicked.connect(action)
         return self
 
 
-class LineEdit(QLineEdit, _LineTextMixin):
+class LineEdit(QLineEdit, LineTextMixin):
     def withMaxLength(self, length: int) -> Self:
         self.setMaxLength(length)
         return self
@@ -115,25 +115,25 @@ class LineEdit(QLineEdit, _LineTextMixin):
         return self
 
 
-class TextEdit(QTextEdit, _RichTextMixin):
+class TextEdit(QTextEdit, RichTextMixin):
     def onTextChanged(self, action: Callable[[str], None]) -> Self:
         self.textChanged.connect(action)
         return self
 
 
-class PlainTextEdit(QPlainTextEdit, _RichTextMixin):
+class PlainTextEdit(QPlainTextEdit, RichTextMixin):
     def onTextChanged(self, action: Callable[[str], None]) -> Self:
         self.textChanged.connect(action)
         return self
 
 
-class Image(QLabel, _WidgetPropsMixin):
+class Image(QLabel, WidgetPropsMixin):
     def __init__(self, image: QPixmap, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setPixmap(image)
 
 
-class ImageState(QLabel, _WidgetPropsMixin):
+class ImageState(QLabel, WidgetPropsMixin):
     def __init__(
         self, images: Sequence[QPixmap], parent: QWidget | None = None
     ) -> None:
@@ -149,7 +149,7 @@ class ImageState(QLabel, _WidgetPropsMixin):
         self.indexChanged.emit(index)
 
 
-class CheckBox(QCheckBox, _CheckableMixin):
+class CheckBox(QCheckBox, CheckableMixin):
     def onCheck(self, action: Callable[[bool], None]) -> Self:
         self.toggled.connect(action)
         return self
@@ -416,7 +416,7 @@ class CheckBoxGroup(_OptionGroup):
         return tuple(i for i, btn in enumerate(self._buttons) if btn.isChecked())
 
 
-class Dropdown[T = None](QComboBox, _WidgetPropsMixin):
+class Dropdown[T = None](QComboBox, WidgetPropsMixin):
     def __init__(
         self,
         *content: DropdownItem[T],
