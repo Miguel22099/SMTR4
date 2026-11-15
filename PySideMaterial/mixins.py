@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Literal, Self, cast
+from typing import Any, Literal, Self, cast
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -185,6 +185,20 @@ class _WidgetPropsMixin:
         w.setDisabled(disabled)
         combined.connect(w.setEnabled)
         return self
+
+    @classmethod
+    def renamedTo[T](cls: type[T], object_name: str) -> type[T]:
+        assert issubclass(cls, QWidget)
+        base: type[Any] = cls
+
+        class Wrapped(base):
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                super().__init__(*args, **kwargs)
+                self.setObjectName(object_name)
+
+        Wrapped.__name__ = f"{cls.__name__}_{object_name}"
+        Wrapped.__qualname__ = f"{cls.__qualname__}_{object_name}"
+        return cast(type[T], Wrapped)
 
 
 class _SetTextMixin(_WidgetPropsMixin):
