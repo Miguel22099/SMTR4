@@ -189,16 +189,20 @@ class WidgetPropsMixin:
     @classmethod
     def renamedTo[T](cls: type[T], object_name: str) -> type[T]:
         assert issubclass(cls, QWidget)
-        base: type[Any] = cls
 
-        class Wrapped(base):
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                super().__init__(*args, **kwargs)
-                self.setObjectName(object_name)
+        def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
+            super(new_cls, self).__init__(*args, **kwargs)
+            self.setObjectName(object_name)
 
-        Wrapped.__name__ = f"{cls.__name__}_{object_name}"
-        Wrapped.__qualname__ = f"{cls.__qualname__}_{object_name}"
-        return cast(type[T], Wrapped)
+        new_cls = type(
+            object_name,
+            (cls,),
+            {
+                "__init__": __init__,
+                "__module__": cls.__module__,
+            },
+        )
+        return cast(type[T], new_cls)
 
 
 class SetTextMixin(WidgetPropsMixin):
