@@ -62,3 +62,25 @@ def intercept_methods[T](
         return cls
 
     return wrapper
+
+
+def frozen[**P, T](func: Callable[P, T]) -> Callable[P, Callable[[], T]]:
+    def inner(*args: P.args, **kwargs: P.kwargs) -> Callable[[], T]:
+        def manager() -> T:
+            return func(*args, **kwargs)
+
+        return manager
+
+    return inner
+
+
+def partial_frozen[**P, T, L](
+    func: Callable[Concatenate[L, P], T],
+) -> Callable[P, Callable[[L], T]]:
+    def inner(*args: P.args, **kwargs: P.kwargs) -> Callable[[L], T]:
+        def manager(val: L) -> T:
+            return func(val, *args, **kwargs)
+
+        return manager
+
+    return inner

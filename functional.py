@@ -1,15 +1,4 @@
 import os
-from collections.abc import Callable
-
-
-def frozen_args[**P, T](func: Callable[P, T]) -> Callable[P, Callable[[], T]]:
-    def inner(*args: P.args, **kwargs: P.kwargs) -> Callable[[], T]:
-        def manager() -> T:
-            return func(*args, **kwargs)
-
-        return manager
-
-    return inner
 
 
 def money_format(val: int) -> str:

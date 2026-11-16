@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
 from functools import partial
 from typing import Any, Literal, Self, cast
 
@@ -14,8 +13,10 @@ from PySide6.QtWidgets import (
 )
 
 from ..events import Event, StateVar
+from .core import Stretch
 from .protocols import (
     EventEmiter,
+    ObjectProperty,
     Subscribable,
     SupportsRichTextChanged,
     SupportsSetChecked,
@@ -24,11 +25,6 @@ from .protocols import (
 )
 
 type LayoutItem = "QWidget | QLayout | QSpacerItem | Stretch"
-
-
-@dataclass(frozen=True, slots=True)
-class Stretch:
-    val: int = 1
 
 
 class BoxLayoutMixin:
@@ -66,7 +62,7 @@ class WidgetPropsMixin:
         assert isinstance(self, QWidget)
         return self
 
-    def props(
+    def setProps(
         self,
         *,
         object_name: str | None = None,
@@ -125,6 +121,12 @@ class WidgetPropsMixin:
         w = self._widget
         w.setHidden(hidden)
         event.connect(w.setHidden)
+        return self
+
+    def hiddenUntil(self, event: EventEmiter[[]], hidden: bool = True) -> Self:
+        w = self._widget
+        w.setHidden(hidden)
+        event.connect(lambda: w.setHidden(False))
         return self
 
     def withStyleSheet(self, style_sheet: str) -> Self:
@@ -187,12 +189,16 @@ class WidgetPropsMixin:
         return self
 
     @classmethod
-    def renamedTo[T](cls: type[T], object_name: str) -> type[T]:
+    def renamedTo[T](
+        cls: type[T], object_name: str, *properties: ObjectProperty
+    ) -> type[T]:
         assert issubclass(cls, QWidget)
 
         def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
             super(new_cls, self).__init__(*args, **kwargs)
             self.setObjectName(object_name)
+            for p in properties:
+                p.value(self)
 
         new_cls = type(
             object_name,

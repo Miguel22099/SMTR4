@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
+from PySide6.QtWidgets import QWidget
+
 
 @runtime_checkable
 class Subscribable[**P](Protocol):
@@ -37,3 +39,8 @@ class SupportsRichTextChanged(Protocol):
     textChanged: Subscribable[[]]
 
     def toPlainText(self) -> str: ...
+
+
+class ObjectProperty(Protocol):
+    @property
+    def value[W: QWidget](self) -> Callable[[W], W]: ...

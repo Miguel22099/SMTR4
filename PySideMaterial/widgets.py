@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from ..converters import coerce_in
 from ..events import Event, StateVar, StatusHolder
-from .filters import Filter, TextFilter
+from ..filters import Filter, TextFilter
 from .mixins import (
     BoxLayoutMixin,
     CheckableMixin,
@@ -505,12 +505,11 @@ class Dropdown[T = None](QComboBox, WidgetPropsMixin):
 
 
 class TemporalScreen(MWidget):
-    def __init__(
-        self, layout: QBoxLayout, owner: QStackedLayout, life_time: int
-    ) -> None:
+    def __init__(self, layout: QBoxLayout, life_time: int) -> None:
         super().__init__()
         self.setLayout(layout)
         self.timer = QTimer(self)
+        self._lifeTimeFinished = Event[[]]()
 
         self.timer.timeout.connect(self.finish_existence)
         self.timer.start(life_time)
@@ -518,3 +517,4 @@ class TemporalScreen(MWidget):
     def finish_existence(self) -> None:
         self.setParent(None)
         self.deleteLater()
+        self._lifeTimeFinished.emit()
