@@ -29,14 +29,15 @@ type LayoutItem = "QWidget | QLayout | QSpacerItem | Stretch"
 
 
 class BoxLayoutMixin:
-    def __init__(
+    _stretch = 0
+
+    def setup(
         self,
         *items: LayoutItem,
         spacing: int = 10,
         stretch: int = 0,
         margins: tuple[int, int, int, int] = (0, 0, 0, 0),
     ) -> None:
-        super().__init__()
         assert isinstance(self, QBoxLayout)
 
         self._stretch = stretch
@@ -281,19 +282,19 @@ class ButtonMixin(WidgetPropsMixin):
         assert isinstance(self, QAbstractButton)
         return self
 
-    def onClick(self, action: Callable[[], None]) -> Self:
+    def onClick(self, action: Callable[[], Any]) -> Self:
         self._button.clicked.connect(action)
         return self
 
-    def onPress(self, action: Callable[[], None]) -> Self:
+    def onPress(self, action: Callable[[], Any]) -> Self:
         self._button.pressed.connect(action)
         return self
 
-    def onRelease(self, action: Callable[[], None]) -> Self:
+    def onRelease(self, action: Callable[[], Any]) -> Self:
         self._button.released.connect(action)
         return self
 
-    def onToggle(self, action: Callable[[bool], None]) -> Self:
+    def onToggle(self, action: Callable[[bool], Any]) -> Self:
         self._button.toggled.connect(action)
         return self
 

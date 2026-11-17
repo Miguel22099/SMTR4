@@ -1,8 +1,8 @@
 from collections.abc import Callable, Sequence
 from typing import Any, Literal, Self, cast
 
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
@@ -12,15 +12,22 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QGridLayout,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLayout,
     QLineEdit,
     QListWidget,
+    QMenuBar,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QStackedLayout,
+    QTableWidget,
+    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -33,6 +40,7 @@ from .mixins import (
     BoxLayoutMixin,
     ButtonMixin,
     CheckableMixin,
+    LayoutItem,
     LineTextMixin,
     RichTextMixin,
     SetTextMixin,
@@ -80,10 +88,169 @@ class ListWidget(QListWidget, WidgetPropsMixin):
         return self
 
 
-class Row(BoxLayoutMixin, QHBoxLayout): ...
+class Table(QTableWidget, WidgetPropsMixin):
+    """QTableWidget preloaded with headers, read-only and row-selected.
+
+    Store an arbitrary payload per row via `data` in `addRow`; `onSelect`
+    emits that payload when the user selects a row.
+    """
+
+    def __init__(self, *headers: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setColumnCount(len(headers))
+        self.setHorizontalHeaderLabels(headers)
+        self.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+
+    def clear(self) -> None:
+        self.setRowCount(0)
+        self._fitColumns()
+
+    def addRow(self, *cells: str, data: Any = None) -> Self:
+        row = self.rowCount()
+        self.insertRow(row)
+        for col, text in enumerate(cells):
+            item = QTableWidgetItem(text)
+            if col == 0:
+                item.setData(Qt.ItemDataRole.UserRole, data)
+            self.setItem(row, col, item)
+        self._fitColumns()
+        return self
+
+    def _fitColumns(self) -> None:
+        """Sizes every column to its longest text, then distributes the
+        viewport surplus proportionally. Columns never shrink below content."""
+        header = self.horizontalHeader()
+        count = self.columnCount()
+        if count == 0 or (viewport := self.viewport().width()) <= 0:
+            return
+
+        contents = [max(header.sectionSizeHint(i), 1) for i in range(count)]
+        total = sum(contents)
+        factor = max(1.0, viewport / total)
+        widths = [int(c * factor) for c in contents]
+        widths[-1] += viewport - sum(widths)  # rounding remainder
+
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        for i, width in enumerate(widths):
+            self.setColumnWidth(i, width)
+
+    def resizeEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self._fitColumns()
+
+    @property
+    def selectedData(self) -> Any | None:
+        item = self.item(self.currentRow(), 0)
+        return None if item is None else item.data(Qt.ItemDataRole.UserRole)
+
+    def onSelect(self, action: Callable[[Any], Any]) -> Self:
+        def on_selection() -> None:
+            if (data := self.selectedData) is not None:
+                action(data)
+
+        self.itemSelectionChanged.connect(on_selection)
+        return self
 
 
-class Column(BoxLayoutMixin, QVBoxLayout): ...
+class Tree(QTreeWidget, WidgetPropsMixin):
+    """QTreeWidget preloaded with headers; each item may carry a payload.
+
+    `addBranch` stores an arbitrary payload in column 0's UserRole, and the
+    `onCurrent`/`onSelect` callbacks emit that payload on selection.
+    """
+
+    def __init__(self, *headers: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setColumnCount(len(headers))
+        self.setHeaderLabels(headers)
+
+    def addBranch(
+        self,
+        label: str,
+        data: Any = None,
+        *,
+        parent: QTreeWidgetItem | None = None,
+    ) -> Self:
+        item = QTreeWidgetItem([label])
+        if data is not None:
+            item.setData(0, Qt.ItemDataRole.UserRole, data)
+        if parent is None:
+            self.addTopLevelItem(item)
+        else:
+            parent.addChild(item)
+        return self
+
+    @property
+    def selectedData(self) -> Any | None:
+        item = self.currentItem()
+        return None if item is None else item.data(0, Qt.ItemDataRole.UserRole)
+
+    def selectData(self, data: Any) -> Self:
+        """Selects the first item whose payload equals `data` (no-op if absent)."""
+        stack = [
+            item
+            for i in range(self.topLevelItemCount())
+            if (item := self.topLevelItem(i)) is not None
+        ]
+        while stack:
+            current = stack.pop()
+            if current.data(0, Qt.ItemDataRole.UserRole) == data:
+                self.setCurrentItem(current)
+                return self
+            stack.extend(
+                child
+                for i in range(current.childCount())
+                if (child := current.child(i)) is not None
+            )
+        return self
+
+    def onCurrent(self, action: Callable[[Any], Any]) -> Self:
+        """Fires `action(payload)` on every selection change, `None` included."""
+
+        def on_change() -> None:
+            action(self.selectedData)
+
+        self.itemSelectionChanged.connect(on_change)
+        return self
+
+    def onSelect(self, action: Callable[[Any], Any]) -> Self:
+        """Fires `action(payload)` only when a payload-carrying item is selected."""
+
+        def on_change() -> None:
+            if (data := self.selectedData) is not None:
+                action(data)
+
+        self.itemSelectionChanged.connect(on_change)
+        return self
+
+
+class Row(BoxLayoutMixin, QHBoxLayout):
+    def __init__(
+        self,
+        *items: LayoutItem,
+        spacing: int = 10,
+        stretch: int = 0,
+        margins: tuple[int, int, int, int] = (0, 0, 0, 0),
+    ) -> None:
+        super().__init__()
+        self.setup(*items, spacing=spacing, stretch=stretch, margins=margins)
+
+
+class Column(BoxLayoutMixin, QVBoxLayout):
+    def __init__(
+        self,
+        *items: LayoutItem,
+        spacing: int = 10,
+        stretch: int = 0,
+        margins: tuple[int, int, int, int] = (0, 0, 0, 0),
+    ) -> None:
+        super().__init__()
+        self.setup(*items, spacing=spacing, stretch=stretch, margins=margins)
 
 
 class Label(QLabel, SetTextMixin): ...
@@ -514,6 +681,58 @@ class Dropdown[T = None](QComboBox, WidgetPropsMixin):
 
     def clear(self) -> None:
         self.setCurrentIndex(-1)
+
+
+class Menu(QMenu, WidgetPropsMixin):
+    """Dropdown menu in Word style: chainable actions, separators and submenus."""
+
+    def action(
+        self,
+        label: str,
+        *,
+        shortcut: str | None = None,
+        on_trigger: Callable[[], Any] | None = None,
+        checkable: bool = False,
+    ) -> Self:
+        act = self.addAction(label)
+        if shortcut is not None:
+            act.setShortcut(QKeySequence(shortcut))
+        act.setCheckable(checkable)
+        if on_trigger is not None:
+            act.triggered.connect(lambda *_: on_trigger())
+        return self
+
+    def toggleAction(
+        self,
+        label: str,
+        state: StateVar[bool],
+        *,
+        shortcut: str | None = None,
+    ) -> Self:
+        """Checkable action kept in sync with a boolean StateVar."""
+        act = self.addAction(label)
+        if shortcut is not None:
+            act.setShortcut(QKeySequence(shortcut))
+        act.setCheckable(True)
+        act.setChecked(bool(state.value))
+        act.toggled.connect(state.set_value)
+        state.connect(act.setChecked)
+        return self
+
+    def separator(self) -> Self:
+        self.addSeparator()
+        return self
+
+    def subMenu(self, submenu: "Menu") -> Self:
+        self.addMenu(submenu)
+        return self
+
+
+class MenuBar(QMenuBar, WidgetPropsMixin):
+    def __init__(self, *menus: Menu, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        for menu in menus:
+            self.addMenu(menu)
 
 
 class TemporalScreen(MWidget):
