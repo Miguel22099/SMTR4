@@ -1,10 +1,11 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import partial
 from typing import Any, Literal, Self, cast
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QBoxLayout,
     QLayout,
     QSizePolicy,
@@ -28,13 +29,19 @@ type LayoutItem = "QWidget | QLayout | QSpacerItem | Stretch"
 
 
 class BoxLayoutMixin:
-    def __init__(self, *items: LayoutItem, spacing: int = 10, stretch: int = 0) -> None:
+    def __init__(
+        self,
+        *items: LayoutItem,
+        spacing: int = 10,
+        stretch: int = 0,
+        margins: tuple[int, int, int, int] = (0, 0, 0, 0),
+    ) -> None:
         super().__init__()
         assert isinstance(self, QBoxLayout)
 
         self._stretch = stretch
         self.setSpacing(spacing)
-        self.setContentsMargins(0, 0, 0, 0)
+        self.setContentsMargins(*margins)
 
         for item in items:
             match item:
@@ -55,12 +62,47 @@ class BoxLayoutMixin:
                         f"Elemento no soportado en el layout: {type(item).__name__}"
                     )
 
+    @classmethod
+    def withProperties[T](cls: type[T], *properties: ObjectProperty) -> type[T]:
+        assert issubclass(cls, QBoxLayout)
+
+        def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
+            super(new_cls, self).__init__(*args, **kwargs)
+            for p in properties:
+                p(self)
+
+        new_cls = type(
+            f"Standardized[{cls.__name__}]",
+            (cls,),
+            {
+                "__init__": __init__,
+                "__module__": cls.__module__,
+            },
+        )
+        return cast(type[T], new_cls)
+
 
 class WidgetPropsMixin:
     @property
     def _widget(self) -> QWidget:
         assert isinstance(self, QWidget)
         return self
+
+    def _bind(self, event: Any, callback: Callable[..., Any]) -> None:
+        """Suscribe un callback al evento y limpia la conexión al destruir el widget."""
+        w = self._widget
+
+        def _safe_callback(*args: Any) -> None:
+            try:
+                callback(*args)
+            except RuntimeError:
+                pass
+
+        sub = event.connect(_safe_callback)
+        if callable(sub):
+            w.destroyed.connect(lambda *_: sub())
+        elif hasattr(event, "disconnect"):
+            w.destroyed.connect(lambda *_: event.disconnect(_safe_callback))
 
     def setProps(
         self,
@@ -76,9 +118,20 @@ class WidgetPropsMixin:
         if alignment is not None:
             self._alignment = alignment
         if object_name is not None:
+            old_name = w.objectName()
             w.setObjectName(object_name)
+            if old_name and f"#{old_name} {{" in w.styleSheet():
+                w.setStyleSheet(
+                    w.styleSheet().replace(f"#{old_name} {{", f"#{object_name} {{")
+                )
         if font is not None:
-            w.setFont(font)
+            if isinstance(font, str):
+                resolved_font = QFont(font)
+            elif isinstance(font, Sequence):
+                resolved_font = QFont(list(font))
+            else:
+                resolved_font = font
+            w.setFont(resolved_font)
         return self
 
     def withFixedSize(
@@ -113,20 +166,22 @@ class WidgetPropsMixin:
 
     def enabledBy(self, event: EventEmiter[bool], disabled: bool = True) -> Self:
         w = self._widget
-        w.setDisabled(disabled)
-        event.connect(w.setEnabled)
+        initial = bool(getattr(event, "value", not disabled))
+        w.setEnabled(initial)
+        self._bind(event, w.setEnabled)
         return self
 
     def hiddenBy(self, event: EventEmiter[bool], hidden: bool = True) -> Self:
         w = self._widget
-        w.setHidden(hidden)
-        event.connect(w.setHidden)
+        initial = bool(getattr(event, "value", hidden))
+        w.setHidden(initial)
+        self._bind(event, w.setHidden)
         return self
 
     def hiddenUntil(self, event: EventEmiter[[]], hidden: bool = True) -> Self:
         w = self._widget
         w.setHidden(hidden)
-        event.connect(lambda: w.setHidden(False))
+        self._bind(event, lambda: w.setHidden(False))
         return self
 
     def withStyleSheet(self, style_sheet: str) -> Self:
@@ -153,43 +208,52 @@ class WidgetPropsMixin:
         radius: int = 8,
         style: Literal["solid", "dashed", "dotted"] = "solid",
     ) -> Self:
-        """Adds a border rule scoped to the widget's nearest QtWidgets class."""
+        """Adds a border rule scoped strictly to this widget via objectName."""
         w = self._widget
-        selector = next(
-            (
-                cls.__name__
-                for cls in type(w).__mro__
-                if cls.__module__.startswith("PySide6.QtWidgets")
-            ),
-            "QWidget",
-        )
+        if not w.objectName():
+            w.setObjectName(f"_bordered_{id(w)}")
+
+        selector = f"#{w.objectName()}"
         rule = (
             f"{selector} {{ border: {width}px {style} {color};"
             f" border-radius: {radius}px; }}"
         )
-        w.setStyleSheet("\n".join(part for part in (w.styleSheet(), rule) if part))
+        existing = [
+            line
+            for line in w.styleSheet().splitlines()
+            if not line.startswith(f"{selector} {{ border:")
+        ]
+        existing.append(rule)
+        w.setStyleSheet("\n".join(existing))
         return self
 
     def enabledByAll(self, *conditions: StateVar[bool], disabled: bool = True) -> Self:
         """Enables the widget only while every given condition is true."""
         w = self._widget
+        if not conditions:
+            w.setDisabled(disabled)
+            return self
 
         combined = Event[bool]()
-        buffer = [False for _ in conditions]
+        refs: list[Any] = getattr(w, "_reactive_refs", [])
+        refs.append(combined)
+        w._reactive_refs = refs  # type: ignore[attr-defined]
+
+        buffer = [bool(getattr(c, "value", not disabled)) for c in conditions]
 
         def update(index: int, status: object) -> None:
             buffer[index] = bool(status)
             combined.emit(all(buffer))
 
         for index, condition in enumerate(conditions):
-            condition.connect(partial(update, index))
+            self._bind(condition, partial(update, index))
 
-        w.setDisabled(disabled)
-        combined.connect(w.setEnabled)
+        w.setEnabled(all(buffer))
+        self._bind(combined, w.setEnabled)
         return self
 
     @classmethod
-    def renamedTo[T](
+    def withProperties[T](
         cls: type[T], object_name: str, *properties: ObjectProperty
     ) -> type[T]:
         assert issubclass(cls, QWidget)
@@ -198,7 +262,7 @@ class WidgetPropsMixin:
             super(new_cls, self).__init__(*args, **kwargs)
             self.setObjectName(object_name)
             for p in properties:
-                p.value(self)
+                p(self)
 
         new_cls = type(
             object_name,
@@ -211,15 +275,40 @@ class WidgetPropsMixin:
         return cast(type[T], new_cls)
 
 
+class ButtonMixin(WidgetPropsMixin):
+    @property
+    def _button(self) -> QAbstractButton:
+        assert isinstance(self, QAbstractButton)
+        return self
+
+    def onClick(self, action: Callable[[], None]) -> Self:
+        self._button.clicked.connect(action)
+        return self
+
+    def onPress(self, action: Callable[[], None]) -> Self:
+        self._button.pressed.connect(action)
+        return self
+
+    def onRelease(self, action: Callable[[], None]) -> Self:
+        self._button.released.connect(action)
+        return self
+
+    def onToggle(self, action: Callable[[bool], None]) -> Self:
+        self._button.toggled.connect(action)
+        return self
+
+
 class SetTextMixin(WidgetPropsMixin):
     def textBy(self, event: Subscribable[str]) -> Self:
         target = cast(SupportsSetText, self)
-        event.connect(target.setText)
+        self._bind(event, target.setText)
         return self
 
-    def clean(self) -> None:
+    def clear(self) -> None:
         target = cast(SupportsSetText, self)
         target.setText("")
+
+    clean = clear
 
 
 class LineTextMixin(SetTextMixin):
@@ -236,10 +325,10 @@ class RichTextMixin(SetTextMixin):
         return self
 
 
-class CheckableMixin(WidgetPropsMixin):
+class CheckableMixin(ButtonMixin):
     def checkBy(self, event: Subscribable[bool]) -> Self:
         target = cast(SupportsSetChecked, self)
-        event.connect(target.setChecked)
+        self._bind(event, target.setChecked)
         return self
 
     def checkOn(self, event: EventEmiter[bool]) -> Self:
@@ -247,6 +336,8 @@ class CheckableMixin(WidgetPropsMixin):
         target.toggled.connect(event.emit)
         return self
 
-    def clean(self) -> None:
+    def clear(self) -> None:
         target = cast(SupportsSetChecked, self)
         target.setChecked(False)
+
+    clean = clear

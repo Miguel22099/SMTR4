@@ -41,6 +41,4 @@ class SupportsRichTextChanged(Protocol):
     def toPlainText(self) -> str: ...
 
 
-class ObjectProperty(Protocol):
-    @property
-    def value[W: QWidget](self) -> Callable[[W], W]: ...
+type ObjectProperty[W: QWidget] = Callable[[W], W]

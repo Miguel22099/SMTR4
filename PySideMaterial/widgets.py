@@ -31,6 +31,7 @@ from ..events import Event, StateVar, StatusHolder
 from ..filters import Filter, TextFilter
 from .mixins import (
     BoxLayoutMixin,
+    ButtonMixin,
     CheckableMixin,
     LineTextMixin,
     RichTextMixin,
@@ -79,22 +80,16 @@ class ListWidget(QListWidget, WidgetPropsMixin):
         return self
 
 
-class Row(BoxLayoutMixin, QHBoxLayout):
-    pass
+class Row(BoxLayoutMixin, QHBoxLayout): ...
 
 
-class Column(BoxLayoutMixin, QVBoxLayout):
-    pass
+class Column(BoxLayoutMixin, QVBoxLayout): ...
 
 
-class Label(QLabel, SetTextMixin):
-    pass
+class Label(QLabel, SetTextMixin): ...
 
 
-class Button(QPushButton, SetTextMixin):
-    def onClick(self, action: Callable[[], object]) -> Self:
-        self.clicked.connect(action)
-        return self
+class Button(QPushButton, SetTextMixin, ButtonMixin): ...
 
 
 class LineEdit(QLineEdit, LineTextMixin):
@@ -107,7 +102,13 @@ class LineEdit(QLineEdit, LineTextMixin):
         f = filter if isinstance(filter, TextFilter) else filter.value
 
         def apply(text: str) -> None:
-            self.setText(f(text))
+            filtered = f(text)
+            if filtered == text:
+                return
+            pos = self.cursorPosition()
+            diff = len(text) - len(filtered)
+            self.setText(filtered)
+            self.setCursorPosition(max(0, pos - diff))
 
         self.textChanged.connect(apply)
         return self
@@ -139,6 +140,8 @@ class ImageState(QLabel, WidgetPropsMixin):
     def __init__(
         self, images: Sequence[QPixmap], parent: QWidget | None = None
     ) -> None:
+        if not images:
+            raise ValueError("ImageState requiere al menos una imagen.")
         super().__init__(parent)
         self._images = images
         self._max = len(self._images) - 1
@@ -151,7 +154,7 @@ class ImageState(QLabel, WidgetPropsMixin):
         self.indexChanged.emit(index)
 
 
-class CheckBox(QCheckBox, CheckableMixin):
+class CheckBox(QCheckBox, CheckableMixin, SetTextMixin):
     def onCheck(self, action: Callable[[bool], None]) -> Self:
         self.toggled.connect(action)
         return self
@@ -244,7 +247,6 @@ class ScreenManager(MWidget):
             self.nextScreen()
         while self.index > target:
             self.prevScreen()
-        self.indexChanged.emit(target)
 
     def goToStart(self) -> None:
         self.setIndex(0)
@@ -311,7 +313,7 @@ class Survey(MWidget):
         self.anyTextFieldFilled.emit(any(s.value for s in self.formStatus))
         self.allTextFieldFilled.emit(all(s.value for s in self.formStatus))
 
-    def clean(self) -> None:
+    def clear(self) -> None:
         for field in self._fields:
             field.clear()
 
@@ -334,14 +336,18 @@ class _OptionGroup(MWidget):
         self._buttons: list[QAbstractButton] = []
 
         self.checkStatus = tuple(StatusHolder(False) for _ in names)
-        self.anyChecked = Event[bool]()
+        self.anyChecked = StateVar(False)
 
         self.setLayout(self._layout)
 
     def _add_button(self, button: QAbstractButton, index: int) -> None:
         self._buttons.append(button)
-        button.toggled.connect(self.checkStatus[index].write)
+        status = self.checkStatus[index]
+
+        button.toggled.connect(status.write)
         button.toggled.connect(self._on_toggled)
+        if hasattr(status, "connect"):
+            self._bind(status, button.setChecked)
 
         if isinstance(self._layout, QGridLayout):
             row, col = divmod(index, self._columns)
@@ -350,11 +356,55 @@ class _OptionGroup(MWidget):
             self._layout.addWidget(button)
 
     def _on_toggled(self, checked: bool) -> None:
-        self.anyChecked.emit(any(btn.isChecked() for btn in self._buttons))
+        self.anyChecked.set_value(any(btn.isChecked() for btn in self._buttons))
+
+    def clearOn(self, event: Any) -> Self:
+        self._bind(event, lambda *_: self.clear())
+        return self
 
     def clear(self) -> None:
         for btn in self._buttons:
             btn.setChecked(False)
+
+
+class CheckBoxGroup(_OptionGroup):
+    def __init__(
+        self,
+        *names: str,
+        orientation: GroupLayout | None = None,
+        defaultOn: Sequence[int] | int | None = None,
+        columns: int = 2,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(
+            *names, orientation=orientation, columns=columns, parent=parent
+        )
+        self.allChecked = StateVar(False)
+
+        initial: set[int] = (
+            set()
+            if defaultOn is None
+            else {defaultOn}
+            if isinstance(defaultOn, int)
+            else set(defaultOn)
+        )
+
+        for index, name in enumerate(names):
+            checkbox = QCheckBox(name)
+            self._add_button(checkbox, index)
+
+            if index in initial:
+                checkbox.setChecked(True)
+
+    def _on_toggled(self, checked: bool) -> None:
+        super()._on_toggled(checked)
+        self.allChecked.set_value(
+            bool(self._buttons) and all(btn.isChecked() for btn in self._buttons)
+        )
+
+    @property
+    def selectedIndex(self) -> tuple[int, ...]:
+        return tuple(i for i, btn in enumerate(self._buttons) if btn.isChecked())
 
 
 class RadioGroup(_OptionGroup):
@@ -400,44 +450,6 @@ class RadioGroup(_OptionGroup):
         checked.setChecked(False)
         self.container.setExclusive(True)
         self.indexChanged.emit(-1)
-
-
-class CheckBoxGroup(_OptionGroup):
-    def __init__(
-        self,
-        *names: str,
-        orientation: GroupLayout | None = None,
-        defaultOn: Sequence[int] | int | None = None,
-        columns: int = 2,
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(
-            *names, orientation=orientation, columns=columns, parent=parent
-        )
-        self.allChecked = Event[bool]()
-
-        initial: set[int] = (
-            set()
-            if defaultOn is None
-            else {defaultOn}
-            if isinstance(defaultOn, int)
-            else set(defaultOn)
-        )
-
-        for index, name in enumerate(names):
-            checkbox = QCheckBox(name)
-            self._add_button(checkbox, index)
-
-            if index in initial:
-                checkbox.setChecked(True)
-
-    def _on_toggled(self, checked: bool) -> None:
-        super()._on_toggled(checked)
-        self.allChecked.emit(all(btn.isChecked() for btn in self._buttons))
-
-    @property
-    def selectedIndex(self) -> tuple[int, ...]:
-        return tuple(i for i, btn in enumerate(self._buttons) if btn.isChecked())
 
 
 class Dropdown[T = None](QComboBox, WidgetPropsMixin):
@@ -509,12 +521,21 @@ class TemporalScreen(MWidget):
         super().__init__()
         self.setLayout(layout)
         self.timer = QTimer(self)
-        self._lifeTimeFinished = Event[[]]()
+        self.lifeTimeFinished = Event[[]]()
 
-        self.timer.timeout.connect(self.finish_existence)
-        self.timer.start(life_time)
+        self.timer.singleShot(life_time, self.finish_existence)
+
+        def delete() -> None:
+            self.lifeTimeFinished.disconnect_all()
+            del self.lifeTimeFinished
+
+        self.destroyed.connect(delete)
+
+    def onLifeTimeFinished(self, action: Callable[[], None]) -> Self:
+        self.lifeTimeFinished.connect(action)
+        return self
 
     def finish_existence(self) -> None:
         self.setParent(None)
         self.deleteLater()
-        self._lifeTimeFinished.emit()
+        self.lifeTimeFinished.emit()
