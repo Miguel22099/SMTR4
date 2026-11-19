@@ -93,15 +93,21 @@ class Table(QTableWidget, WidgetPropsMixin):
 
     Store an arbitrary payload per row via `data` in `addRow`; `onSelect`
     emits that payload when the user selects a row.
+
+    Columns fit their content and share the viewport width. A width chosen by
+    dragging a header edge is kept, and the surplus is distributed among the
+    remaining columns, so extending the window never leaves uncovered space.
     """
 
     def __init__(self, *headers: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
-        self.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
-        )
+        self._custom_widths: dict[int, int] = {}
+        self._fitting = False
+        header = self.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.sectionResized.connect(self._onSectionResized)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -121,23 +127,63 @@ class Table(QTableWidget, WidgetPropsMixin):
         self._fitColumns()
         return self
 
+    def _onSectionResized(self, index: int, _old: int, new: int) -> None:
+        """Remembers a width the user picked by dragging a header edge, then
+        re-fits the remaining columns so no gap is left behind."""
+        if self._fitting:
+            return
+        self._custom_widths[index] = new
+        if len(self._custom_widths) < self.columnCount():
+            QTimer.singleShot(0, self._fitColumns)
+
     def _fitColumns(self) -> None:
-        """Sizes every column to its longest text, then distributes the
-        viewport surplus proportionally. Columns never shrink below content."""
+        """Keeps user-customised widths, sizes the rest to their content and
+        shares the viewport width between them.
+
+        Free columns grow proportionally to fill any surplus, so extending the
+        window never leaves uncovered space, and never shrink below their
+        content size (a scrollbar appears when the viewport is too narrow).
+        """
         header = self.horizontalHeader()
         count = self.columnCount()
         if count == 0 or (viewport := self.viewport().width()) <= 0:
             return
 
-        contents = [max(header.sectionSizeHint(i), 1) for i in range(count)]
-        total = sum(contents)
-        factor = max(1.0, viewport / total)
-        widths = [int(c * factor) for c in contents]
-        widths[-1] += viewport - sum(widths)  # rounding remainder
+        self._custom_widths = {
+            i: w for i, w in self._custom_widths.items() if 0 <= i < count
+        }
+        custom = self._custom_widths
+        hints = [max(header.sectionSizeHint(i), 1) for i in range(count)]
+        free = [i for i in range(count) if i not in custom]
 
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        for i, width in enumerate(widths):
-            self.setColumnWidth(i, width)
+        widths = dict(custom)
+        available = viewport - sum(custom.values())
+
+        if not free:
+            # Every column is customised: scale them proportionally so the
+            # table still covers the viewport.
+            total = sum(custom.values()) or 1
+            factor = viewport / total
+            fitted = [max(int(w * factor), 1) for w in custom.values()]
+            fitted[-1] += viewport - sum(fitted)  # rounding remainder
+            widths = dict(zip(custom.keys(), fitted))
+        elif available >= sum(hints[i] for i in free):
+            # Surplus: grow free columns proportionally until they fill it.
+            free_hints = sum(hints[i] for i in free)
+            factor = available / free_hints
+            fitted = [int(hints[i] * factor) for i in free]
+            fitted[-1] += available - sum(fitted)  # rounding remainder
+            widths.update(zip(free, fitted))
+        else:
+            # Free columns keep at least their content size; the table scrolls.
+            widths.update((i, hints[i]) for i in free)
+
+        self._fitting = True
+        try:
+            for i in range(count):
+                self.setColumnWidth(i, widths[i])
+        finally:
+            self._fitting = False
 
     def resizeEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
