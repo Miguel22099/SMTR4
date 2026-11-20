@@ -12,23 +12,23 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QGridLayout,
-    QHeaderView,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLayout,
     QLineEdit,
     QListWidget,
-    QMenuBar,
     QMenu,
+    QMenuBar,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QStackedLayout,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -730,7 +730,7 @@ class Dropdown[T = None](QComboBox, WidgetPropsMixin):
 
 
 class Menu(QMenu, WidgetPropsMixin):
-    """Dropdown menu in Word style: chainable actions, separators and submenus."""
+    """Dropdown menu chainable actions, separators and submenus."""
 
     def action(
         self,
