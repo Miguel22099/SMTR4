@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 from ..converters import coerce_in
 from ..events import Event, StateVar, StatusHolder
 from ..filters import Filter, TextFilter
+from ..type_defs import Action
 from .mixins import (
     BoxLayoutMixin,
     ButtonMixin,
@@ -82,7 +83,7 @@ class ListWidget(QListWidget, WidgetPropsMixin):
         if currentRow >= 0:
             self.setCurrentRow(currentRow)
 
-    def bindAction(self, action: Callable[["ListWidget"], object]) -> Self:
+    def bindAction(self, action: Action[["ListWidget"]]) -> Self:
         """Runs `action` on this list and returns it, so calls can be chained."""
         action(self)
         return self
@@ -194,7 +195,7 @@ class Table(QTableWidget, WidgetPropsMixin):
         item = self.item(self.currentRow(), 0)
         return None if item is None else item.data(Qt.ItemDataRole.UserRole)
 
-    def onSelect(self, action: Callable[[Any], Any]) -> Self:
+    def onSelect(self, action: Action[[Any]]) -> Self:
         def on_selection() -> None:
             if (data := self.selectedData) is not None:
                 action(data)
@@ -255,7 +256,7 @@ class Tree(QTreeWidget, WidgetPropsMixin):
             )
         return self
 
-    def onCurrent(self, action: Callable[[Any], Any]) -> Self:
+    def onCurrent(self, action: Action[[Any]]) -> Self:
         """Fires `action(payload)` on every selection change, `None` included."""
 
         def on_change() -> None:
@@ -264,7 +265,7 @@ class Tree(QTreeWidget, WidgetPropsMixin):
         self.itemSelectionChanged.connect(on_change)
         return self
 
-    def onSelect(self, action: Callable[[Any], Any]) -> Self:
+    def onSelect(self, action: Action[[Any]]) -> Self:
         """Fires `action(payload)` only when a payload-carrying item is selected."""
 
         def on_change() -> None:
@@ -326,19 +327,19 @@ class LineEdit(QLineEdit, LineTextMixin):
         self.textChanged.connect(apply)
         return self
 
-    def onTextEdited(self, action: Callable[[str], None]) -> Self:
+    def onTextEdited(self, action: Action[[str]]) -> Self:
         self.textEdited.connect(action)
         return self
 
 
 class TextEdit(QTextEdit, RichTextMixin):
-    def onTextChanged(self, action: Callable[[str], None]) -> Self:
+    def onTextChanged(self, action: Action[[str]]) -> Self:
         self.textChanged.connect(action)
         return self
 
 
 class PlainTextEdit(QPlainTextEdit, RichTextMixin):
-    def onTextChanged(self, action: Callable[[str], None]) -> Self:
+    def onTextChanged(self, action: Action[[str]]) -> Self:
         self.textChanged.connect(action)
         return self
 
@@ -368,11 +369,11 @@ class ImageState(QLabel, WidgetPropsMixin):
 
 
 class CheckBox(QCheckBox, CheckableMixin, SetTextMixin):
-    def onCheck(self, action: Callable[[bool], None]) -> Self:
+    def onCheck(self, action: Action[[bool]]) -> Self:
         self.toggled.connect(action)
         return self
 
-    def onStateChanged(self, action: Callable[[Literal[1, 2, 3]], None]) -> Self:
+    def onStateChanged(self, action: Action[[Literal[1, 2, 3]]]) -> Self:
         self.stateChanged.connect(action)
         return self
 
@@ -705,19 +706,19 @@ class Dropdown[T = None](QComboBox, WidgetPropsMixin):
         self.addItem(label, userData=data)
         return self
 
-    def onDataChange(self, action: Callable[[T | None], Any]) -> Self:
+    def onDataChange(self, action: Action[[T | None]]) -> Self:
         self.currentIndexChanged.connect(lambda _: action(self.selectedData))
         return self
 
-    def onTextChange(self, action: Callable[[str], Any]) -> Self:
+    def onTextChange(self, action: Action[[str]]) -> Self:
         self.currentTextChanged.connect(action)
         return self
 
-    def onIndexChange(self, action: Callable[[int], Any]) -> Self:
+    def onIndexChange(self, action: Action[[int]]) -> Self:
         self.currentIndexChanged.connect(action)
         return self
 
-    def onActivated(self, action: Callable[[int], Any]) -> Self:
+    def onActivated(self, action: Action[[int]]) -> Self:
         self.activated.connect(action)
         return self
 
@@ -737,7 +738,7 @@ class Menu(QMenu, WidgetPropsMixin):
         label: str,
         *,
         shortcut: str | None = None,
-        on_trigger: Callable[[], Any] | None = None,
+        on_trigger: Action[[]] | None = None,
         checkable: bool = False,
     ) -> Self:
         act = self.addAction(label)
@@ -796,7 +797,7 @@ class TemporalScreen(MWidget):
 
         self.destroyed.connect(delete)
 
-    def onLifeTimeFinished(self, action: Callable[[], None]) -> Self:
+    def onLifeTimeFinished(self, action: Action[[]]) -> Self:
         self.lifeTimeFinished.connect(action)
         return self
 

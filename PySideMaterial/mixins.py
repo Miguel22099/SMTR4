@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from functools import partial
 from typing import Any, Literal, Self, cast
 
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..events import Event, StateVar
+from ..type_defs import Action
 from .core import Stretch
 from .protocols import (
     EventEmiter,
@@ -89,7 +90,7 @@ class WidgetPropsMixin:
         assert isinstance(self, QWidget)
         return self
 
-    def _bind(self, event: Any, callback: Callable[..., Any]) -> None:
+    def _bind(self, event: Any, callback: Action[...]) -> None:
         """Suscribe un callback al evento y limpia la conexión al destruir el widget."""
         w = self._widget
 
@@ -282,19 +283,19 @@ class ButtonMixin(WidgetPropsMixin):
         assert isinstance(self, QAbstractButton)
         return self
 
-    def onClick(self, action: Callable[[], Any]) -> Self:
+    def onClick(self, action: Action[[]]) -> Self:
         self._button.clicked.connect(action)
         return self
 
-    def onPress(self, action: Callable[[], Any]) -> Self:
+    def onPress(self, action: Action[[]]) -> Self:
         self._button.pressed.connect(action)
         return self
 
-    def onRelease(self, action: Callable[[], Any]) -> Self:
+    def onRelease(self, action: Action[[]]) -> Self:
         self._button.released.connect(action)
         return self
 
-    def onToggle(self, action: Callable[[bool], Any]) -> Self:
+    def onToggle(self, action: Action[[bool]]) -> Self:
         self._button.toggled.connect(action)
         return self
 

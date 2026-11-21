@@ -1,10 +1,12 @@
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, Concatenate
+from typing import Concatenate
+
+from .type_defs import Action
 
 
 def intercept_method_call[**P, S, R](
-    self_action: Callable[[S], Any] | None = None,
+    self_action: Action[[S]] | None = None,
 ):
     def decorator(
         func: Callable[Concatenate[S, P], R],
@@ -23,7 +25,7 @@ def intercept_method_call[**P, S, R](
     return decorator
 
 
-def intercept_return[**P, S](action: Callable[[S], Any]):
+def intercept_return[**P, S](action: Action[[S]]):
     def decorator(func: Callable[P, S]) -> Callable[P, S]:
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> S:

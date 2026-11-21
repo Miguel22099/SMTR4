@@ -1,13 +1,14 @@
-from collections.abc import Callable
-from typing import Any
+from dataclasses import asdict, dataclass
+from typing import Any, Self
 
 from .events import Event
+from .type_defs import Action, SupportsJsonTransform
 
 
 class Counter:
     def __init__(
         self,
-        on_finish: Callable[[], Any],
+        on_finish: Action[[]],
         begin: int = 0,
         finish: int = 3,
     ) -> None:
@@ -28,10 +29,11 @@ class Counter:
         return self._count
 
 
-class SingletonMeta(type):
-    _instances: dict[type, Any] = {}
+@dataclass
+class JSonParseable(SupportsJsonTransform):
+    def to_json(self) -> dict[str, Any]:
+        return asdict(self)
 
-    def __call__[T: "SingletonMeta"](cls: type[T], *args: Any, **kwargs: Any) -> T:
-        if cls not in cls._instances:
-            cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> Self:
+        return cls(**data)

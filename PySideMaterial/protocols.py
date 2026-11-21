@@ -3,10 +3,12 @@ from typing import Any, Protocol, runtime_checkable
 
 from PySide6.QtWidgets import QWidget
 
+from ..type_defs import Action
+
 
 @runtime_checkable
 class Subscribable[**P](Protocol):
-    def connect(self, listener: Callable[P, Any], /) -> Any: ...
+    def connect(self, listener: Action[P], /) -> Any: ...
 
 
 @runtime_checkable

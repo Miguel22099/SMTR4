@@ -1,13 +1,23 @@
-from collections.abc import Callable
-from enum import Enum
-from typing import Any, Final, Protocol, Self, runtime_checkable
+from collections.abc import Callable, Sequence
+from typing import Any, Final, Protocol, Self, TypeGuard, TypeIs, runtime_checkable
 
-type Function = Callable[[], Any]
+from typing_extensions import Literal
+
+type Action[**P] = Callable[P, Any]
+
+
+class SingletonMeta(type):
+    _instances: dict[type, Any] = {}
+
+    def __call__[T: "SingletonMeta"](cls: type[T], *args: Any, **kwargs: Any) -> T:
+        if cls not in cls._instances:
+            cls._instances[cls] = super().__call__(*args, **kwargs)
+        return cls._instances[cls]
 
 
 @runtime_checkable
 class EventEmiter[**P](Protocol):
-    def connect(self, listener: Callable[P, Any], /) -> None: ...
+    def connect(self, listener: Action[P], /) -> None: ...
     def emit(self, *args: P.args, **kwargs: P.kwargs) -> None: ...
 
 
@@ -33,11 +43,22 @@ class SupportsComparison(Protocol):
     def __lt__(self, value: Any, /) -> bool: ...
 
 
-class VoidType(Enum):
-    VOID = "Void"
+class _Void(metaclass=SingletonMeta):
+    def __bool__(self) -> Literal[False]:
+        return False
 
     def __repr__(self) -> str:
         return "Void"
 
 
-Void: Final = VoidType.VOID
+def isVoid(value: Any) -> TypeIs[_Void]:
+    return isinstance(value, _Void)
+
+
+def isAllType[T](value: Sequence[Any], objective: type[T]) -> TypeGuard[Sequence[T]]:
+    return all(isinstance(x, objective) for x in value)
+
+
+Void: Final = _Void()
+
+type Voidable[T] = T | _Void

@@ -1,12 +1,22 @@
 from collections.abc import Callable
-from typing import cast
+from typing import cast, overload
 
-from .type_defs import SupportsComparison
+from .type_defs import SupportsComparison, Void, Voidable, _Void
 
 
-def safe_convert[T, S, R](
-    converter: Callable[[R], T], data: R, default: S = None
-) -> T | S:
+@overload
+def safe_convert[T, R](
+    converter: Callable[[R], T], data: R, default: _Void = ...
+) -> Voidable[T]: ...
+
+
+@overload
+def safe_convert[T, R](converter: Callable[[R], T], data: R, default: T) -> T: ...
+
+
+def safe_convert[T, R](
+    converter: Callable[[R], T], data: R, default: Voidable[T] = Void
+) -> Voidable[T]:
     try:
         return converter(data)
     except (ValueError, TypeError):
@@ -21,13 +31,30 @@ def coerce_in[S: SupportsComparison](val: S, min: S, max: S) -> S:
     return val
 
 
-class Converter[T, R, S]:
-    def __init__(self, converter: Callable[[R], T], default: S = None):
+class Converter[T, R]:
+    def __init__(self, converter: Callable[[R], T]) -> None:
         self._converter = converter
-        self._default = default
 
-    def __call__(self, data: R) -> T | S:
-        return safe_convert(self._converter, data, self._default)
+    @overload
+    def __call__(
+        self,
+        data: R,
+        default: _Void = ...,
+    ) -> Voidable[T]: ...
+
+    @overload
+    def __call__(
+        self,
+        data: R,
+        default: T = ...,
+    ) -> T: ...
+
+    def __call__(
+        self,
+        data: R,
+        default: Voidable[T] = Void,
+    ) -> Voidable[T]:
+        return safe_convert(self._converter, data, default)
 
 
 class Caster[T, R]:

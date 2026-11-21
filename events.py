@@ -5,38 +5,28 @@ from typing import Any, Concatenate
 
 from .converters import coerce_in
 from .decorators import intercept_methods
-from .type_defs import EventEmiter, SupportsComparison, Void
+from .type_defs import Action, EventEmiter, SupportsComparison, Void
 
 
 class Event[**P]:
     def __init__(self) -> None:
-        self._listeners: list[Callable[P, Any]] = []
+        self._listeners: list[Action[P]] = []
 
-    def connect(self, listener: Callable[P, Any]) -> None:
+    def connect(self, listener: Action[P]) -> None:
         self._listeners.append(listener)
 
     def connect_cast[S](
-        self,
-        listener: Callable[[S], Any],
-        converter: Callable[P, S],
-    ) -> None:
+        self, listener: Action[[S]], converter: Callable[P, S]
+    ) -> Action[P]:
 
         def cast(*args: P.args, **kwargs: P.kwargs) -> None:
             data = converter(*args, **kwargs)
             listener(data)
 
         self.connect(cast)
+        return cast
 
-    def connect_cast_tuple[*TS, S](
-        self, listener: Callable[[*TS], Any], converter: Callable[P, tuple[*TS]]
-    ) -> None:
-        def cast(*args: P.args, **kwargs: P.kwargs) -> None:
-            data = converter(*args, **kwargs)
-            listener(*data)
-
-        self.connect(cast)
-
-    def disconnect(self, slot: Callable[P, object]) -> None:
+    def disconnect(self, slot: Action[P]) -> None:
         try:
             self._listeners.remove(slot)
         except ValueError:
@@ -52,9 +42,9 @@ class Event[**P]:
 
 class SimpleEvent[T]:
     def __init__(self) -> None:
-        self._listeners: list[Callable[[T], Any]] = []
+        self._listeners: list[Action[T]] = []
 
-    def connect(self, listener: Callable[[T], Any]) -> None:
+    def connect(self, listener: Action[T]) -> None:
         self._listeners.append(listener)
 
     def emit(self, val: T) -> None:
@@ -72,7 +62,7 @@ class SimpleEvent[T]:
 
         return emiter
 
-    def disconnect(self, slot: Callable[[T], object]) -> None:
+    def disconnect(self, slot: Action[[T]]) -> None:
         try:
             self._listeners.remove(slot)
         except ValueError:
@@ -85,8 +75,8 @@ class StateVar[S]:
     def __init__(self, value: S) -> None:
         super().__init__()
         self._value = self._coerce_in(value)
-        self._listeners: list[Callable[[S], Any]] = []
-        self._derivated: list[Callable[[S], None]] = []
+        self._listeners: list[Action[S]] = []
+        self._derivated: list[Action[S]] = []
 
     def __str__(self) -> str:
         return repr(self.value)
@@ -113,7 +103,7 @@ class StateVar[S]:
     def _coerce_in(self, val: S) -> S:
         return val
 
-    def connect(self, slot: Callable[[S], Any]) -> None:
+    def connect(self, slot: Action[[S]]) -> None:
         self._listeners.append(slot)
 
     def derivated_state[R](self, converter: Callable[[S], R]) -> "StateVar[R]":
@@ -126,7 +116,7 @@ class StateVar[S]:
         self._derivated.append(func)
         return new
 
-    def disconnect(self, slot: Callable[[S], Any]) -> None:
+    def disconnect(self, slot: Action[[S]]) -> None:
         try:
             self._listeners.remove(slot)
         except ValueError:
