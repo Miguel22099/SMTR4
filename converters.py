@@ -1,12 +1,13 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import cast, overload
 
-from .type_defs import SupportsComparison, Void, Voidable, _Void
+from .type_defs import SupportsComparison, Void, Voidable, _VoidType
 
 
 @overload
 def safe_convert[T, R](
-    converter: Callable[[R], T], data: R, default: _Void = ...
+    converter: Callable[[R], T], data: R, default: _VoidType = ...
 ) -> Voidable[T]: ...
 
 
@@ -39,7 +40,7 @@ class Converter[T, R]:
     def __call__(
         self,
         data: R,
-        default: _Void = ...,
+        default: _VoidType = ...,
     ) -> Voidable[T]: ...
 
     @overload
@@ -66,3 +67,14 @@ class Caster[T, R]:
         if isinstance(val, self._target):
             return val
         return self._converter(cast(T, val))
+
+
+@dataclass(slots=True, frozen=True)
+class Pipe[**P, R]:
+    func: Callable[P, R]
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        return self.func(*args, **kwargs)
+
+    def __or__[S](self, other: Callable[[R], S], /) -> "Pipe[P, S]":
+        return Pipe(lambda *args, **kwargs: other(self(*args, **kwargs)))

@@ -1,8 +1,5 @@
-from dataclasses import asdict, dataclass
-from typing import Any, Self
-
 from .events import Event
-from .type_defs import Action, SupportsJsonTransform
+from .type_defs import Action
 
 
 class Counter:
@@ -27,13 +24,3 @@ class Counter:
             self._count = self._begin
             return self._finish
         return self._count
-
-
-@dataclass
-class JSonParseable(SupportsJsonTransform):
-    def to_json(self) -> dict[str, Any]:
-        return asdict(self)
-
-    @classmethod
-    def from_json(cls, data: dict[str, Any]) -> Self:
-        return cls(**data)

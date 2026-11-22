@@ -1,11 +1,12 @@
 import json
 from collections.abc import Callable, Iterable, Iterator, Sequence
+from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast, dataclass_transform
 
 from ..classes import Counter
 from ..events import MutableList
-from ..type_defs import SupportsJsonTransform
+from ..type_defs import MetaDataclass, SupportsJsonTransform
 
 if TYPE_CHECKING:
     from _typeshed import SupportsRichComparison
@@ -163,7 +164,9 @@ class Single_Json_Saver[T]:
     `revive` rebuilds them on load.
     """
 
-    def __init__(self, file_path: str, revive: Callable[[Any], T] | None = None) -> None:
+    def __init__(
+        self, file_path: str, revive: Callable[[Any], T] | None = None
+    ) -> None:
         self._path = file_path
         self._revive = revive
 
@@ -175,11 +178,11 @@ class Single_Json_Saver[T]:
             return [Single_Json_Saver._freeze(item) for item in value]
         return value
 
-    def save(self, data: T) -> None:
+    def save(self, data: T | Sequence[T]) -> None:
         with open(self._path, "w", encoding="utf-8") as f:
             json.dump(self._freeze(data), f, indent=2)
 
-    def save_tuple(self, *data: Any) -> None:
+    def save_tuple(self, *data: T) -> None:
         self.save(data)
 
     def _load_json(self) -> Any | None:
@@ -194,3 +197,31 @@ class Single_Json_Saver[T]:
         if data is None:
             return None
         return self._revive(data) if self._revive else data
+
+
+@dataclass_transform()
+class _JsonModelMeta(MetaDataclass):
+    def __new__(mcs, name, bases, namespace):
+        cls = super().__new__(mcs, name, bases, namespace)
+
+        if not namespace.get("__abstract_model__", False):
+            if "repo_name" not in namespace:
+                raise TypeError(f"{name} mus define 'repo_name'")
+            pointer = cast(Any, cls)
+            pointer.repository = Json_Repository(pointer, pointer.repo_name)
+
+        return cls
+
+
+class JsonModel(metaclass=_JsonModelMeta):
+    __abstract_model__ = True
+
+    repository: ClassVar[Json_Repository[Self]]
+    repo_name: ClassVar[str]
+
+    def to_json(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> Self:
+        return cls(**data)

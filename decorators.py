@@ -1,8 +1,11 @@
+import logging
 from collections.abc import Callable
 from functools import wraps
 from typing import Concatenate
 
 from .type_defs import Action
+
+logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s:%(message)s")
 
 
 def intercept_method_call[**P, S, R](
@@ -84,5 +87,19 @@ def partial_frozen[**P, T, L](
             return func(val, *args, **kwargs)
 
         return manager
+
+    return inner
+
+
+def debug[**P, T](func: Callable[P, T]) -> Callable[P, T]:
+    logger = logging.getLogger(func.__module__)
+
+    def inner(*args: P.args, **kwargs: P.kwargs) -> T:
+        val = func(*args, **kwargs)
+
+        logger.debug(
+            f"\nfunction: {func.__name__}\nargs: {args}\nkwargs: {kwargs}\nresult: {val}\n\n"
+        )
+        return val
 
     return inner

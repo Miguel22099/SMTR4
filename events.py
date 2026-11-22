@@ -62,7 +62,7 @@ class SimpleEvent[T]:
 
         return emiter
 
-    def disconnect(self, slot: Action[[T]]) -> None:
+    def disconnect(self, slot: Action[T]) -> None:
         try:
             self._listeners.remove(slot)
         except ValueError:
@@ -103,7 +103,7 @@ class StateVar[S]:
     def _coerce_in(self, val: S) -> S:
         return val
 
-    def connect(self, slot: Action[[S]]) -> None:
+    def connect(self, slot: Action[S]) -> None:
         self._listeners.append(slot)
 
     def derivated_state[R](self, converter: Callable[[S], R]) -> "StateVar[R]":
@@ -116,7 +116,7 @@ class StateVar[S]:
         self._derivated.append(func)
         return new
 
-    def disconnect(self, slot: Action[[S]]) -> None:
+    def disconnect(self, slot: Action[S]) -> None:
         try:
             self._listeners.remove(slot)
         except ValueError:
