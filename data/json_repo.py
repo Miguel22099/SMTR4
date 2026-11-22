@@ -206,7 +206,7 @@ class _JsonModelMeta(MetaDataclass):
 
         if not namespace.get("__abstract_model__", False):
             if "repo_name" not in namespace:
-                raise TypeError(f"{name} mus define 'repo_name'")
+                raise TypeError(f"{name} must define 'repo_name'")
             pointer = cast(Any, cls)
             pointer.repository = Json_Repository(pointer, pointer.repo_name)
 
