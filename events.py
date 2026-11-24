@@ -5,7 +5,7 @@ from typing import Any, Concatenate
 
 from .converters import coerce_in
 from .decorators import intercept_methods
-from .type_defs import Action, EventEmiter, SupportsComparison, Void
+from .type_defs import Action, EventEmiter, Null, SupportsComparison
 
 
 class Event[**P]:
@@ -170,7 +170,7 @@ class ChainedState[S](StateVar[S]):
 
 class Remember:
     def __new__[S: EventEmiter[Any]](cls, event: S) -> S:
-        last = Void
+        last = Null
         _emitter = event.emit
 
         @wraps(event.emit)

@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from functools import partial
 from typing import Any, Literal, Self, cast
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..events import Event, StateVar
-from ..type_defs import Action
+from ..type_defs import Action, Optional
 from .core import Stretch
 from .protocols import (
     EventEmiter,
@@ -27,6 +27,7 @@ from .protocols import (
 )
 
 type LayoutItem = "QWidget | QLayout | QSpacerItem | Stretch"
+type ms = int
 
 
 class BoxLayoutMixin:
@@ -252,6 +253,25 @@ class WidgetPropsMixin:
 
         w.setEnabled(all(buffer))
         self._bind(combined, w.setEnabled)
+        return self
+
+    def executeIn(self, action: Action[[]], time: ms) -> Self:
+        w = self._widget
+        timer = QTimer(w)
+        timer.singleShot(
+            time, lambda: (action(), timer.setParent(None), timer.deleteLater())
+        )
+        return self
+
+    def executeInterval(
+        self, action: Action[[]], time: ms, name: Optional[str]
+    ) -> Self:
+        w = self._widget
+        timer = QTimer(w)
+        timer.timeout.connect(action)
+        timer.start(time)
+        if name is not None:
+            setattr(w, name, timer)
         return self
 
     @classmethod

@@ -1,4 +1,8 @@
 import random
+from typing import Self
+
+from .events import Event
+from .type_defs import Action
 
 
 class ID_Generator:
@@ -80,3 +84,30 @@ class Phone_Generator:
 
     def generate_many(self, quantity: int) -> list[str]:
         return [self.generate() for _ in range(quantity)]
+
+
+class Counter:
+    def __init__(
+        self,
+        begin: int = 0,
+        finish: int = -1,
+    ) -> None:
+        if finish != -1:
+            if finish <= begin:
+                raise ValueError("finish must be greater than begin")
+        self._begin = begin
+        self._finish = finish
+        self._count = 0
+        self.finished = Event[[]]()
+
+    def count(self) -> int:
+        self._count += 1
+        if self._count == self._finish:
+            self.finished.emit()
+            self._count = self._begin
+            return self._finish
+        return self._count
+
+    def on_finish(self, action: Action[[]]) -> Self:
+        self.finished.connect(action)
+        return self

@@ -1,12 +1,12 @@
 import json
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self, cast, dataclass_transform
+from typing import TYPE_CHECKING, Any, ClassVar, Self, dataclass_transform
 
-from ..classes import Counter
 from ..events import MutableList
-from ..type_defs import MetaDataclass, SupportsJsonTransform
+from ..generators import Counter
+from ..type_defs import SupportsJsonTransform
 
 if TYPE_CHECKING:
     from _typeshed import SupportsRichComparison
@@ -79,9 +79,8 @@ class Json_Repository[T: SupportsJsonTransform]:
             nonlocal counter
 
             counter = Counter(
-                lambda: self.save(data),
                 finish=changes_before_write,
-            )
+            ).on_finish(lambda: self.save(data))
 
             data.contentChanged.disconnect(unbind)
             data.contentChanged.connect(bind)
@@ -200,24 +199,28 @@ class Single_Json_Saver[T]:
 
 
 @dataclass_transform()
-class _JsonModelMeta(MetaDataclass):
-    def __new__(mcs, name, bases, namespace):
-        cls = super().__new__(mcs, name, bases, namespace)
+@dataclass
+class JsonModel:
+    """Base class for dataclasses persisted as one JSON object per line.
 
-        if not namespace.get("__abstract_model__", False):
-            if "repo_name" not in namespace:
-                raise TypeError(f"{name} must define 'repo_name'")
-            pointer = cast(Any, cls)
-            pointer.repository = Json_Repository(pointer, pointer.repo_name)
+    A subclass only needs to declare ``repo_name``; its ``repository`` is
+    created automatically without a metaclass.
+    """
 
-        return cls
-
-
-class JsonModel(metaclass=_JsonModelMeta):
-    __abstract_model__ = True
+    __abstract_model__: ClassVar[bool] = True
 
     repository: ClassVar[Json_Repository[Self]]
     repo_name: ClassVar[str]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+        if not cls.__dict__.get("__abstract_model__", False):
+            if "repo_name" not in cls.__dict__:
+                raise TypeError(f"{cls.__name__} must define 'repo_name'")
+            cls.repository = Json_Repository(cls, cls.repo_name)
+
+        dataclass(cls)
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)

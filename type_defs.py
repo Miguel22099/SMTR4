@@ -1,6 +1,4 @@
-from abc import ABCMeta
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from typing import (
     Any,
     Final,
@@ -8,7 +6,6 @@ from typing import (
     Self,
     TypeGuard,
     TypeIs,
-    dataclass_transform,
     runtime_checkable,
 )
 
@@ -25,14 +22,6 @@ class SingletonMeta(type):
         if cls not in cls._instances:
             cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
-
-
-@dataclass_transform()
-class MetaDataclass(ABCMeta):
-    def __new__(mcs, name: str, bases: tuple[type, ...], namespace: dict[str, Any]):
-        cls = super().__new__(mcs, name, bases, namespace)
-        cls = dataclass()(cls)
-        return cls
 
 
 @runtime_checkable
@@ -63,22 +52,23 @@ class SupportsComparison(Protocol):
     def __lt__(self, value: Any, /) -> bool: ...
 
 
-class _VoidType(metaclass=SingletonMeta):
+class _NullType(metaclass=SingletonMeta):
     def __bool__(self) -> Literal[False]:
         return False
 
     def __repr__(self) -> str:
-        return "Void"
+        return "Null"
 
 
-def isVoid(value: Any) -> TypeIs[_VoidType]:
-    return isinstance(value, _VoidType)
+def isNull(value: Any) -> TypeIs[_NullType]:
+    return isinstance(value, _NullType)
 
 
 def isAllType[T](value: Sequence[Any], objective: type[T]) -> TypeGuard[Sequence[T]]:
     return all(isinstance(x, objective) for x in value)
 
 
-Void: Final = _VoidType()
+Null: Final = _NullType()
 
-type Voidable[T] = T | _VoidType
+type Nullable[T] = T | _NullType
+type Optional[T] = T | None
