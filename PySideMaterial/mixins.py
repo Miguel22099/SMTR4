@@ -228,7 +228,7 @@ class WidgetPropsMixin:
             return self
 
         combined = ComputedState(
-            conditions, converter=lambda _: all(x.value for x in _)
+            *conditions, converter=lambda *_: all(x.value for x in conditions)
         )
 
         refs: list[Any] = getattr(w, "_reactive_refs", [])
