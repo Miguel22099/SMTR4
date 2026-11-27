@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QLayout,
     QLineEdit,
     QListWidget,
+    QMainWindow,
     QMenu,
     QMenuBar,
     QPlainTextEdit,
@@ -33,10 +34,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..converters import coerce_in
+from ..converters import Interval
 from ..events import Event, StateVar, StatusHolder
 from ..filters import Filter, TextFilter
-from ..type_defs import Action
+from ..type_defs import Action, EventEmiter, IllegalExpression
 from .mixins import (
     BoxLayoutMixin,
     ButtonMixin,
@@ -358,14 +359,34 @@ class ImageState(QLabel, WidgetPropsMixin):
             raise ValueError("ImageState requiere al menos una imagen.")
         super().__init__(parent)
         self._images = images
-        self._max = len(self._images) - 1
         self.setPixmap(images[0])
         self.indexChanged = Event[int]()
+        self._interval = Interval(0, len(self._images) - 1)
 
     def setIndex(self, index: int, /) -> None:
-        index = coerce_in(index, 0, self._max)
+        index = self._interval.fit_interval(index)
         self.setPixmap(self._images[index])
         self.indexChanged.emit(index)
+
+
+class InteractiveImage(QLabel, WidgetPropsMixin):
+    def __init__(self, scale_x: int = 100, scale_y: int = 200) -> None:
+        super().__init__()
+        self.currentImage = StateVar[None | QPixmap](None)
+        self.x_scale = scale_x
+        self.y_scale = scale_y
+
+    def imagePathBy(self, path_gestor: EventEmiter[str]) -> Self:
+        path_gestor.connect(
+            lambda x: self.setPixmap(QPixmap(x).scaled(self.x_scale, self.y_scale))
+        )
+        return self
+
+    def pixmapBy(self, pixmap_gestor: EventEmiter[QPixmap]) -> Self:
+        pixmap_gestor.connect(
+            lambda x: self.setPixmap(x.scaled(self.x_scale, self.y_scale))
+        )
+        return self
 
 
 class CheckBox(QCheckBox, CheckableMixin, SetTextMixin):
@@ -805,3 +826,16 @@ class TemporalScreen(MWidget):
         self.setParent(None)
         self.deleteLater()
         self.lifeTimeFinished.emit()
+
+
+class MainWindow(QMainWindow, WidgetPropsMixin):
+    def withMenu(self, menu: MenuBar) -> Self:
+        self.setMenuBar(menu)
+        return self
+
+    def withCentralWidget(self, widget: QWidget) -> Self:
+        self.setCentralWidget(widget)
+        return self
+
+    def withLayout(self, layout: QLayout) -> Self:
+        raise IllegalExpression("MainWindow layout cannot be changed here")

@@ -1,33 +1,36 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import (
     Any,
     Final,
+    Literal,
     Protocol,
     Self,
-    TypeGuard,
-    TypeIs,
     runtime_checkable,
 )
 
-from typing_extensions import Literal
-
 type Action[**P] = Callable[P, Any]
-type ChainCall[T, R] = Callable[[T], R]
+type Optional[T] = T | None
+type Nullable[T] = T | NullType
 
 
-class SingletonMeta(type):
-    _instances: dict[type, Any] = {}
+class Singleton:
+    _instance: Optional[Self] = None
 
-    def __call__[T: "SingletonMeta"](cls: type[T], *args: Any, **kwargs: Any) -> T:
-        if cls not in cls._instances:
-            cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
+    def __new__(cls) -> Self:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
 
 @runtime_checkable
 class EventEmiter[**P](Protocol):
     def connect(self, listener: Action[P], /) -> None: ...
-    def emit(self, *args: P.args, **kwargs: P.kwargs) -> None: ...
+
+    @property
+    def emit(self) -> Action[P]: ...
+
+    @emit.setter
+    def emit(self, value: Action[P]) -> None: ...
 
 
 @runtime_checkable
@@ -42,17 +45,23 @@ class SupportsJsonTransform(Protocol):
     def from_json(cls, data: dict[str, Any]) -> Self: ...
 
 
+class IllegalExpression(Exception): ...
+
+
 class HasId(Protocol):
     id: int
 
 
+@runtime_checkable
 class SupportsComparison(Protocol):
     def __eq__(self, value: Any, /) -> bool: ...
     def __gt__(self, value: Any, /) -> bool: ...
     def __lt__(self, value: Any, /) -> bool: ...
 
 
-class _NullType(metaclass=SingletonMeta):
+class NullType(Singleton):
+    """Sentinel class, Null is his unique instance and all instances points to it"""
+
     def __bool__(self) -> Literal[False]:
         return False
 
@@ -60,15 +69,4 @@ class _NullType(metaclass=SingletonMeta):
         return "Null"
 
 
-def isNull(value: Any) -> TypeIs[_NullType]:
-    return isinstance(value, _NullType)
-
-
-def isAllType[T](value: Sequence[Any], objective: type[T]) -> TypeGuard[Sequence[T]]:
-    return all(isinstance(x, objective) for x in value)
-
-
-Null: Final = _NullType()
-
-type Nullable[T] = T | _NullType
-type Optional[T] = T | None
+Null: Final = NullType()

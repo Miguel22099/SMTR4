@@ -15,7 +15,7 @@ def remove_duplicates[T](items: Iterable[T]) -> list[T]:
 
 
 def flatten[T](items: Iterable[Iterable[T]]) -> Iterable[T]:
-    return [item for group in items for item in group]
+    yield from (item for group in items for item in group)
 
 
 def abs_path(base: str, path: str) -> str:

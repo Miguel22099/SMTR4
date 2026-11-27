@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-from functools import partial
 from typing import Any, Literal, Self, cast
 
 from PySide6.QtCore import Qt, QTimer
@@ -13,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..events import Event, StateVar
+from ..events import ComputedState, StateVar
 from ..type_defs import Action, Optional
 from .core import Stretch
 from .protocols import (
@@ -107,34 +105,26 @@ class WidgetPropsMixin:
         elif hasattr(event, "disconnect"):
             w.destroyed.connect(lambda *_: event.disconnect(_safe_callback))
 
-    def setProps(
-        self,
-        *,
-        object_name: str | None = None,
-        stretch: int | None = None,
-        alignment: Qt.AlignmentFlag | None = None,
-        font: QFont | str | Sequence[str] | None = None,
-    ) -> Self:
+    def withLayout(self, layout: QLayout) -> Self:
         w = self._widget
-        if stretch is not None:
-            self._stretch = stretch
-        if alignment is not None:
-            self._alignment = alignment
-        if object_name is not None:
-            old_name = w.objectName()
-            w.setObjectName(object_name)
-            if old_name and f"#{old_name} {{" in w.styleSheet():
-                w.setStyleSheet(
-                    w.styleSheet().replace(f"#{old_name} {{", f"#{object_name} {{")
-                )
-        if font is not None:
-            if isinstance(font, str):
-                resolved_font = QFont(font)
-            elif isinstance(font, Sequence):
-                resolved_font = QFont(list(font))
-            else:
-                resolved_font = font
-            w.setFont(resolved_font)
+        w.setLayout(layout)
+        return self
+
+    def withFont(self, font: QFont) -> Self:
+        w = self._widget
+        w.setFont(font)
+        return self
+
+    def withStretch(self, stretch: int) -> Self:
+        self._stretch = stretch
+        return self
+
+    def withWidgetName(self, name: str) -> Self:
+        w = self._widget
+        old_name = w.objectName()
+        w.setObjectName(name)
+        if old_name and f"#{old_name} {{" in w.styleSheet():
+            w.setStyleSheet(w.styleSheet().replace(f"#{old_name} {{", f"#{name} {{"))
         return self
 
     def withFixedSize(
@@ -237,21 +227,15 @@ class WidgetPropsMixin:
             w.setDisabled(disabled)
             return self
 
-        combined = Event[bool]()
+        combined = ComputedState(
+            conditions, converter=lambda _: all(x.value for x in _)
+        )
+
         refs: list[Any] = getattr(w, "_reactive_refs", [])
         refs.append(combined)
-        w._reactive_refs = refs  # type: ignore[attr-defined]
+        setattr(w, "_reactive_refs", refs)
 
-        buffer = [bool(getattr(c, "value", not disabled)) for c in conditions]
-
-        def update(index: int, status: object) -> None:
-            buffer[index] = bool(status)
-            combined.emit(all(buffer))
-
-        for index, condition in enumerate(conditions):
-            self._bind(condition, partial(update, index))
-
-        w.setEnabled(all(buffer))
+        w.setEnabled(combined.value)
         self._bind(combined, w.setEnabled)
         return self
 

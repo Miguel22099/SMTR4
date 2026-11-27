@@ -1,13 +1,13 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import cast, overload
+from typing import Final, cast, overload
 
-from .type_defs import Null, Nullable, SupportsComparison, _NullType
+from .type_defs import Null, Nullable, NullType, SupportsComparison
 
 
 @overload
 def safe_convert[T, R](
-    converter: Callable[[R], T], data: R, default: _NullType = ...
+    converter: Callable[[R], T], data: R, default: NullType = ...
 ) -> Nullable[T]: ...
 
 
@@ -40,7 +40,7 @@ class Converter[T, R]:
     def __call__(
         self,
         data: R,
-        default: _NullType = ...,
+        default: NullType = ...,
     ) -> Nullable[T]: ...
 
     @overload
@@ -98,3 +98,28 @@ class Pipe[*Ts, R]:
             return other(res)
 
         return Pipe(wrapper)
+
+
+@dataclass(slots=True, frozen=True)
+class Interval[S: SupportsComparison]:
+    min: S
+    max: S
+
+    def __contains__(self, value: object) -> bool:
+        if isinstance(value, type(self.min)):
+            if self.min < value < self.max:
+                return True
+            elif self.min == value or self.max == value:
+                return True
+        return False
+
+    def fit_interval(self, value: S) -> S:
+        if value < self.min:
+            return self.min
+        if value > self.max:
+            return self.max
+        return value
+
+
+Safe_int: Final = Converter(int)
+Safe_float: Final = Converter(float)

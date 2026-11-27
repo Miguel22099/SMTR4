@@ -98,7 +98,7 @@ def debug[**P, T](func: Callable[P, T]) -> Callable[P, T]:
         val = func(*args, **kwargs)
 
         logger.debug(
-            f"\nfunction: {func.__name__}\nargs: {args}\nkwargs: {kwargs}\nresult: {val}\n\n"
+            f"\nfunction: {getattr(func, '__name__', '<Unknown>')}\nargs: {args}\nkwargs: {kwargs}\nresult: {val}\n\n"
         )
         return val
 

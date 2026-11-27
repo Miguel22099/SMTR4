@@ -3,7 +3,7 @@ from functools import wraps
 from types import TracebackType
 from typing import Any, Concatenate
 
-from .converters import coerce_in
+from .converters import Interval
 from .decorators import intercept_methods
 from .type_defs import Action, EventEmiter, Null, SupportsComparison
 
@@ -131,11 +131,10 @@ class StateVar[S]:
 class IntervalStateVar[S: SupportsComparison](StateVar[S]):
     def __init__(self, value: S, min: S, max: S) -> None:
         super().__init__(value)
-        self._min = min
-        self._max = max
+        self._interval = Interval(min, max)
 
     def _verified(self, val: S) -> S:
-        return coerce_in(val, self._min, self._max)
+        return self._interval.fit_interval(val)
 
 
 class StateVarTuple[*TS](StateVar[tuple[*TS]]):
@@ -219,11 +218,14 @@ class MutableList[T](list[T]):
         data: Iterable[T] | None = None,
     ):
         super().__init__(data or ())
-        self._event = Event[MutableList[T]]()
+        self._event = Event[[MutableList[T]]]()
 
     @property
-    def contentChanged(self) -> Event["MutableList[T]"]:
+    def contentChanged(self) -> Event[["MutableList[T]"]]:
         return self._event
+
+
+def _silence(*_args: Any, **_kwargs: Any) -> None: ...
 
 
 class SilencedSignal:
@@ -232,7 +234,7 @@ class SilencedSignal:
         self._ev = self._event.emit
 
     def __enter__(self):
-        self._event.emit = lambda val: None
+        self._event.emit = _silence
 
     def __exit__(
         self,
